@@ -89,9 +89,11 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <string>
 
 
 using namespace dealii;
+template <int dim>
 void test(const std::string &file_name)
 {
   enum
@@ -100,22 +102,35 @@ void test(const std::string &file_name)
     hydrogel_domain_id
   };
 
-  const unsigned int dim = 2;
   const unsigned int degree = 2;
   FE_SimplexP<dim> volume_fe(degree);
   Triangulation<dim> triangulation(Triangulation<dim>::maximum_smoothing);
   std::ifstream grid_file(file_name);
 
-  GridIn<2, 2> gridin;
+  GridIn<dim, dim> gridin;
   gridin.attach_triangulation(triangulation);
-  gridin.read_msh(grid_file);
+  std::ifstream &f(grid_file);
+  gridin.read_msh(f);
 
   GridOut grid_out;
   std::ofstream out(file_name + "mesh.out.vtk");
   grid_out.write_vtk(triangulation, out);
 
   hp::FECollection<dim> volume_fe_collection;
-  volume_fe_collection.push_back(FE_Nothing<dim>(ReferenceCells::Triangle));
+  switch (dim)
+  {
+  case 2:
+      volume_fe_collection.push_back(FE_Nothing<dim>(ReferenceCells::Triangle));
+    break;
+  case 3:
+      volume_fe_collection.push_back(FE_Nothing<dim>(ReferenceCells::Tetrahedron));
+    break;
+  default:
+    Assert(false, ExcNotImplemented());
+  }
+
+  
+  
   volume_fe_collection.push_back(volume_fe);
 
   DoFHandler<dim>       volume_dof_handler(triangulation);
@@ -123,7 +138,7 @@ void test(const std::string &file_name)
 
 
   hp::QCollection<dim> quadrature_collection;
-  const QGaussSimplex<dim> quadrature_formula(2 + degree);
+  const QGaussSimplex<dim> quadrature_formula(1);
   quadrature_collection.push_back(quadrature_formula);
   quadrature_collection.push_back(quadrature_formula);
 
@@ -181,11 +196,15 @@ void test(const std::string &file_name)
 
 
   for(const auto &cell : volume_dof_handler.active_cell_iterators())
-    if(cell->material_id() == hydrogel_domain_id)
+    // if(cell->material_id() == hydrogel_domain_id)
     {
+      if(cell->measure()< 1e-12)
+        std::cout<<" cell measure = "<<cell->measure()<<std::endl;
       volume_fe_values.reinit(cell);
       const FEValues<dim> &volume_fe_values =
         volume_fe_values.get_present_fe_values();
+      // const auto contravariant = volume_fe_values.contravariant;
+      // const double 
     }
 
 
@@ -196,8 +215,9 @@ main()
 {
   try
     {
-      test("extension_triangle_mesh_1.msh");
-      test("extension_triangle_mesh.msh");
+      test<2>("extension_triangle_mesh_1.msh");
+      test<2>("extension_triangle_mesh.msh");
+      test<3>("extension_triangle_mesh_3d.msh");
     }
   catch (std::exception &exc)
     {
